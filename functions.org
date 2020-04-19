@@ -1,0 +1,581 @@
+* Functional Programming in R 
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
+** Functions in R 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+square <- function(x) x**2
+
+square(1:5)
+
+rescale <- function(x) {
+    m <- mean(x)
+    s <- sd(x)
+    (x - m) / s
+}
+#+END_SRC
+
+Return is usually used to exit a function early, and isn't used much in R code.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rescale <- function(x, only_translate) {
+    m <- mean(x)
+    translated <- x - m
+
+    if (only_translate) return(translated)
+    s <- sd(x)
+    translated / s
+}
+
+rescale(1:4, TRUE)
+rescale(1:4, FALSE)
+#+END_SRC
+
+When you provide a named argument to a function, you don't need to use the full parameter name. Any unique prefix will do. This is not reccommended though, as its confusing
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rescale(o = TRUE, 1:10)
+#+END_SRC
+
+*** The Gobble Up Everything Else parameter 
+
+The ellipses parameter is used to pass parameters on to functions called within a function. 
+
+
+For example, we could use it to deal with missing values 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rescale <- function(x, ...) {
+    m <- mean(x, ...)
+    s <- sd(x, ...)
+    (x - m) / s
+}
+
+x <- c(NA, 1:3)
+
+rescale(x)
+rescale(x, na = TRUE)
+#+END_SRC 
+
+The ... parameter allows a function to take any named parameter at all. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(x) x
+g <- function(x, ...) x
+
+f(1:4, foo = "bar")
+g(1:4, foo = "bar")
+#+END_SRC
+
+If you then call another function with ... as a parameter, all of the parameters the first function doesn't know about will be passed on to the second function
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(...) list(...)
+g <- function(x, y, ...) f(...)
+
+g(x = 1, y = 2, z = 3, w = 4)
+#+END_SRC
+
+Using ... isn't particularly safe. It is often hard to figure out wha tit actually does in a particular piece of code. 
+
+To explicitly get a hold of the parameters passed along in ..., you can use the invocation eval(substitute(alist(...)))
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+parameters <- function(...) eval(substitute(alist(...)))
+
+parameters(a = 4, b = a**2)
+#+END_SRC
+
+The alist function creates a list of names for each parameter and values for the expressions given:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+alist(a = 4, b = a**2)
+#+END_SRC
+
+You can not use the list function for this unless you want all the expressions evaluated. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+list(a = 4, b = a**2)
+#+END_SRC
+
+The reason we need substitute and eval is because alist will just give us back the parameters provided to it. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+parameters <- function(...) alist(...)
+parameters(a = 4, b = x**2)
+#+END_SRC
+
+By substituting, we translate ... into the actual parameters given, and by evaluating, we get the list alist would give us in this context: the list of parameters and their associated expressions. 
+
+*** Functions Don't Have Names
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+(function(x) x**2)(2)
+#+END_SRC
+
+*** Lazy Evaluation 
+
+ When you call a function and give it expressions as its arguments, these are not evaluated at that point. What the function gets is not the result of evaluating them, but the actual expressions, called promises. Thus the term call by promise. These expressions are only evaluated when they are actually needed, thus the term lazy evaluation.
+
+ An expression that isn't used in a function isn't evaluated:
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(a, b) a
+
+f(2, stop("error if evaluated"))
+f(stop("error if evaluated"), 2)
+ #+END_SRC
+
+ It is also very useful for default values of parameters. These are evaluated inside the scope of the function, so we can write default values that depend on other parameters. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(a, b = a) a + b
+f(a = 2)
+ #+END_SRC
+
+ This doesn't mean that all the expressions are evaluated inside the scope of the function though. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f(a = 2, b = a)
+ #+END_SRC
+
+ Using other parameters works for default values because these are evaluated inside the function. 
+
+ This also means that you cannot change what an expression evaluates to just by changing a local variable:
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+a <- 4
+f <- function(x) {
+    a <- 2
+    x
+}
+
+f(1 + a)
+ #+END_SRC
+
+ In this example, the expression 1 + a is evaluated inside f, but the a in the expression is the a outside of f and not the a local variable inside f. 
+
+ Since expressions are evaluated in the calling scope and not the scope of the function, you probably won't notice the difference between call-by-value and call-by-promise. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(a) function(b) a + b
+
+f(2)(2)
+
+ff <- vector("list", 4)
+for (i in 1:4) {
+    ff[[i]] <- f(i)
+}
+ #+END_SRC
+
+ Now ff contains four functions, where the first adds 1, second adds 2, and so on. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+ff[[1]](1)
+ #+END_SRC
+
+ When we get the element ff[[1]], we get the first function we created in the loop. If we substitude into f the value we gave in the call, this is function(b) i + b. The parameter a from f has been set to the parameter we gave it, i, but i has not been evaluated at this point
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+i <- 6
+ff[[2]](2)
+ #+END_SRC
+
+ This laziness is only in effect the first time we call the function. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+map_dbl(1:4, ~ ff[[.x]](1))
+results <- vector("numeric", 4)
+for (i in 1:4) {
+    results[i] <- ff[[i]](1)
+}
+results
+ #+END_SRC
+
+ The way to avoid the problem is to force an evaluation of the parameter. If you evaluate it once, it will remember the value, and the problem is gone. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(a) {
+    force(a)
+    function(b) a + b
+}
+
+ff <- vector("list", 4)
+for (i in 1:4) {
+    ff[[i]] <- f(i)
+}
+
+ff[[1]](1)
+i <- 1
+ff[[2]](1)
+
+map(1:4, ~ f(.x)) %>% map(., ~ .x(1))
+ #+END_SRC
+
+ If we give a function an actual value, this is what the function gets:
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+parameters <- function(...) eval(substitute(alist(...)))
+
+p <- parameters(x = 2)
+class(p$x)
+ #+END_SRC
+
+ The class function here tells us the type of the parameter. If we give it a name, we are giving it an expression, even if the name refers to a single value: 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+a <- 2
+p <- parameters(x = a)
+class(p$x)
+
+# if we try to evaluate it, it will eval to the value of the parameter 
+eval(p$x)
+
+# it knows that the var is in the global scope, so if we change it the expression will reflect that change
+a <- 4
+eval(p$x)
+
+# if we call the function with an expression, the type will be "call"
+# this is because all expressions are function calls
+p <- parameters(x = 2 * y)
+class(p$x)
+ #+END_SRC
+
+ We can only evaluate it if the variables the expression refers to are in the scope of the expression. 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+eval(p$x)
+ #+END_SRC
+
+ The parameter y has to be in the calling scope. Expressions are evaluated in the calling scope, not inside the function, so we cannot define "y" inside the parameters function to get an expression we can evaluate 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+parameters2 <- function(...) {
+    y <- 2
+    eval(substitute(alist(...)))
+}
+
+p2 <- parameters2(x = 2 * y)
+eval(p2$x)
+ #+END_SRC
+
+
+ We can set the variable and then evaluate it though 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+y <- 2
+eval(p$x)
+ #+END_SRC
+
+ Alternatively, we can explicitly set the variable in an environment given to the eval function 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+eval(p$x, list(y = 4))
+ #+END_SRC
+
+ Manipulating expressions and the scope they are evaluated in is a very powerful tool. 
+
+** Vectorized Functions 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+x <- 1:5
+y <- 6:10
+x - y
+
+# R uses vector recycling 
+2 * x
+
+x <- 1:6
+y <- 1:3
+x - y
+#+END_SRC
+
+R is happy to use the result of a function call in a vector expression as long as the result is a vector. Functions you write yourself will also be vectorized if their body consists of only vectorized expressions. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+log(1:3) - sqrt(1:3)
+
+f <- function(a, b) log(a) - sqrt(b)
+f(1:3, 1:3)
+#+END_SRC
+
+A function that uses control structures will usually not be vectorized. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# before
+compare <- function(x, y) {
+    if (x < y) {
+        -1 
+    } else if (y <  x) {
+        1
+    } else {
+        0
+    }
+}
+
+compare <- Vectorize(compare)
+
+compare(1:6, 1:3)
+#+END_SRC
+
+By default, Vectorize will vectorize on all parameters of a function. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+scale_with <- function(x, y) {
+    (x - mean(y)) / sd(y)
+}
+
+scale_with(1:6, 1:3)
+
+# vectorize will break this
+scale_with <- Vectorize(scale_with)
+scale_with(1:6, 1:3)
+
+# fix by telling Vectorize which parameters should be vectorized 
+scale_with <- Vectorize(scale_with, vectorize.args = "x")
+#+END_SRC
+
+Simple functions are usually already vectorized, but for functions more complex Vectorize is useful. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+make_node <- function(name, left = NULL, right = NULL) {
+    list(name = name, left = left, right = right)
+}
+
+tree <- make_node("root",
+                  make_node("C",
+                            make_node("A"),
+                            make_node("B")),
+                  make_node("D"))
+
+# compute node length 
+node_depth <- function(tree, name, depth = 0) {
+    if (is.null(tree)) {
+        return(NA)
+    } else if (tree$name == name) {
+        return(depth)
+    } else {
+        left <- node_depth(tree$left, name, depth + 1)
+        right <- node_depth(tree$right, name, depth + 1)
+        if (!is.na(left)) {
+            return(left)
+        } else {
+            return(right)
+        }
+    } 
+}
+
+# this works well with a single name
+node_depth(tree, "D")
+
+# vectorize for sequences
+node_depth <- Vectorize(node_depth,
+                        vectorize.args = "name",
+                        USE.NAMES = FALSE)
+
+node_depth(tree, c("A", "B", "C", "D"))
+#+END_SRC
+
+*** Infix Operators 
+
+A function with a name that starts and ends with the % symbol will be considered an infix operator by R. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+`+`(2, 2)
+
+`if`(2 > 3, "true", "false")
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# define an infix operator that does multiplication
+`%x%` <- `*`
+
+3 %x% 2
+
+# make our infix operator replicate the left hand side a number of times
+`%x%` <- function(expr, num) replicate(num, expr)
+
+3 %x% 5
+
+cat("This is", "very" %x% 5, "cool")
+#+END_SRC
+
+This almost works exactly as replicate, but it fails since the expr parameter is evaluated when we call replicate. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rnorm(1) %x% 4
+#+END_SRC
+
+Here match.call gets us a representation of the current function call from which we can extract the expression without evaluating it. We then use replicate to evaluate it a number of times in the calling function's scope.
+
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+`%x%` <- function(expr, num) {
+    m <- match.call()
+    replicate(num, eval.parent(m$expr))
+}
+
+rnorm(1) %x% 4
+#+END_SRC
+
+*** Replacement Functions 
+
+Data in R is immutable. 
+
+If we create two vectors that point to the same initial vector, and then modify one of them, the other remains unchanged:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+x <- y <- 1:5
+
+x
+
+y
+
+x[1] <- 6
+
+x
+
+y
+#+END_SRC
+
+R will only make a copy when it is necessary, at least for built in data like vectors (for performance reasons).
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+library(pryr)
+
+rm(x); rm(y)
+
+mem_change(x <- 1:10000000)
+address(x)
+
+mem_change(x[1] <- 6)
+address(x)
+#+END_SRC
+
+R copies over the entire vector upon changing a single value because we had an integer vector, but 6 is considered a numeric to R. If we want an actual integer, we need to write L after the number. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+class(6)
+class(6L)
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+z <- 1:5
+class(z)
+z[1] <- 6
+class(z)
+#+END_SRC
+
+If we assign another numeric, we no longer get a copy 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+mem_change(x[3] <- 8)
+address(x)
+#+END_SRC
+
+If we assign x to another variable, we do not get a copy -- we just have two pointers referring to the same variable. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+mem_change(y <- x)
+address(x)
+address(y)
+#+END_SRC
+
+When you assign a variable in R, you are calling the assignment function `<-`. When you assign to an element in a vector or list, you are using the `[<-` function. There is a whole class of functions like this, called replacement functions, that end is <-.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+(x <- 1:4)
+
+names(x) <- letters[1:4]
+
+x
+names(x)
+#+END_SRC
+
+Any function you define whose name ends with <- becomes a replacement function, and the syntax for it is that which evaluates whatever is on the right hand side of the assignment operator and assigns the result to a variable that it takes as its argument. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+names(x) <- letters[1:4]
+
+# is translated to
+x <- `names<-`(x, letters[1:4])
+#+END_SRC
+
+The `attr<-` function is an example. Attributes are key-value maps that can be associated with objects. We can get the attributes associated with an object with the attriytes function and set all the attributes with the `attributes<-` function, or assign individual attributes using the `attr<-` function. 
+
+It takes 3 arguments:
+- The object to modify
+- a which parameter that is the name of the attribute to set
+- the value argument which goes to the right hand side of the assignment
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+x <- 1:4
+attributes(x)
+
+attributes(x) <- list(foo = "bar")
+attributes(x)
+
+attr(x, "baz") <- "qux"
+attributes(x)
+#+END_SRC
+
+Earlier we made a tree like this: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+tree <- make_node("root",
+                  make_node("C",
+                            make_node("A"),
+                            make_node("B")),
+                  make_node("D"))
+#+END_SRC
+
+We can make functions for setting the children of an object like this: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+`left<-` <- function(node, value) {
+    node$left = value
+    node
+}
+
+`right<-` <- function(node, value) {
+    node$right = value
+    node
+}
+#+END_SRC
+
+Then we could make a tree like this: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+A <- make_node("A")
+B <- make_node("B")
+C <- make_node("C")
+D <- make_node("D")
+root <- make_node("root")
+
+left(C) <- A
+right(C) <- B
+left(root) <- C
+right(root) <- D
+tree <- root
+#+END_SRC
+
+To see the results, we can write a function for printing a tree. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+print_tree <- function(tree) {
+    build_string <- function(node) {
+        if (is.null(node$left) && is.null(node$right)) {
+            node$name
+        } else {
+            left <- build_string(node$left)
+            right <- build_string(node$right)
+            paste0("(", left, ",", right, ")")
+        }
+    }
+    build_string(tree)
+}
+
+print_tree(tree)
+#+END_SRC
