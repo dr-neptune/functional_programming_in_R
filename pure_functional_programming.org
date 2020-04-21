@@ -1,0 +1,78 @@
+* Pure Functional Programming
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
+** Writing Pure Functions 
+
+To guarantee a function is pure: 
+
+- avoid sampling random numbers
+- stay away from modifying variables outside the scope of the function 
+
+A solution to avoid problems with functions depending on variables outside their own scope (variables that are neither arguments nor local variables) is to never change was a variable points to.
+
+** Recursion as Loops 
+
+Anything you can write as a loop, you can also write using recursive functions. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+is_empty <- function(sequence) {
+    length(sequence) == 0
+}
+
+first <- function(sequence) {
+    sequence[1]
+}
+
+# this slicing makes R copy the vector
+rest <- function(sequence) {
+    if (is_empty(sequence) | length(sequence) == 1) NULL
+    else sequence[2:length(sequence)]
+}
+
+rest(rest(rest(rest(list(1, 2, 3, 4)))))
+
+lin_search <- function(element, sequence) {
+    if (is_empty(sequence)) FALSE
+    else if (first(sequence) == element) TRUE
+    else lin_search(element, rest(sequence))
+}
+
+lin_search(5, list(1, 3, 7, 9, 15, 5))
+#+END_SRC
+
+Languages built for recursion instead of loops usually represent sequences in a different way, where you can get the rest of a sequence in linear time. 
+
+We will build a next list, a specific kind of a linked list that has a next pointer to the rest of the sequence. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+next_list <- function(element, rest = NULL) {
+    list(element = element, rest = rest)
+}
+
+x <- next_list(1,
+               next_list(2,
+                         next_list(3,
+                                   next_list(4))))
+
+nl_is_empty <- function(nl) is.null(nl)
+nl_first <- function(nl) nl$element
+nl_rest <- function(nl) nl$rest
+
+nl_lin_search <- function(element, sequence) {
+    if (nl_is_empty(sequence)) FALSE
+    else if (nl_first(sequence) == element) TRUE
+    else (nl_lin_search(element, nl_rest(sequence)))
+}
+#+END_SRC
+
+This works fine, in linear time, but constructing lists can be cumbersome.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+vector_to_next_list <- function(x) {
+    if (is_empty(x)) NULL
+    else next_list(first(x),
+                   vector_to_next_list(rest(x)))
+}
+#+END_SRC
