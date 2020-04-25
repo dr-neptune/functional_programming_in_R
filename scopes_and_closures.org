@@ -1,0 +1,6 @@
+* Scopes and Closures 
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
+A scope is something functions or expressions are associated with that tells them what values variables refer to. A closure is a function with an associated scope. 
