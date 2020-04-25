@@ -76,3 +76,373 @@ vector_to_next_list <- function(x) {
                    vector_to_next_list(rest(x)))
 }
 #+END_SRC
+
+We need a way to get the rest of the vector without copying. 
+
+One trick is to keep track of an index into the vector. If that index is interpreted as the index where the vector really stats, we can get the rest of the vector just by increasing the index.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# helper functions
+i_is_empty <- function(x, i) i > length(x)
+i_first <- function(x, i) x[i]
+
+# write a conversion
+i_vector_to_next_list <- function(x, i = 1) {
+    if (i_is_empty(x, i)) NULL
+    else next_list(i_first(x, i),
+                   i_vector_to_next_list(x, i + 1))
+}
+
+# we could have just implemented the search algorithm using an index 
+i_lin_search <- function(element, sequence, i = 1) {
+    if (i_is_empty(sequence, i)) FALSE
+    else if (i_first(sequence, i) == element) TRUE
+    else i_lin_search(element, sequence, i + 1)
+}
+
+# make it generic
+lin_search <- function(element, sequence, i = 1) {
+    if (i > length(sequence)) FALSE
+    else if (sequence[i] == element) TRUE
+    else lin_search(element, sequence, i + 1)
+}
+#+END_SRC
+
+** The Structure of a Recursive Function
+
+Reducing a problem to smaller problems is the hard part. Are the smaller problems really smaller? How do you combine solutions from the smaller problems to solve the larger problem? 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# this fails on 0 and 5
+# this is because when we hit 2 we go into an infinite loop if searching for 0 and 4 for searching 5
+binary_search <- function(element, x,
+                          first = 1, last = length(x)) {
+    if (last < first) return(FALSE)
+
+    middle <- (last - first) %/% 2 + 1
+    xmid <- x[middle]
+    
+    if (element == xmid) TRUE
+    else if (element < xmid) binary_search(element, x, first, middle)
+    else binary_search(element, x, middle, last)
+}
+
+binary_search(5, 1:5)
+
+# we can solve this by never including middle in the range that we try to solve recursively. 
+binary_search <- function(element, x,
+                          first = 1, last = length(x)) {
+    if (last < first) return(FALSE)
+
+    middle <- (last - first) %/% 2 + first
+    xmid <- x[middle]
+    
+    if (element == xmid) TRUE
+    else if (element < xmid) binary_search(element, x, first, middle - 1)
+    else binary_search(element, x, middle + 1, last)
+}
+
+binary_search(0, 1:5)
+#+END_SRC
+
+We must make sure that when we recurse we are working on a smaller problem. This means that if we are recursing on a sequence, we want a smaller sequence, and when we recurse on a tree we want a smaller tree. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+node_depth <- function(tree, name, depth = 0) {
+    if (is.null(tree)) return(NA)
+    if (tree$name == name) return(depth)
+
+    left <- node_depth(tree$left, name, depth + 1)
+    right <- node_depth(tree$right, name, depth + 1)
+
+    if (is.na(left)) return(left)
+    else return(right)
+}
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+factbang <- function(n) {
+    if (n == 1) 1
+    else n * factbang(n - 1)
+}
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+nl_rm_duplicates <- function(sequence) {
+    # if null return false
+    if (is.null(sequence)) return(NULL)
+    else if (is.null(sequence$rest)) return(sequence)
+    
+    rest <- nl_rm_duplicates(sequence$rest)
+    if (x$element == rest$element) rest
+    else next_list(x$element, rest)
+}
+
+(x <- next_list(1,
+               next_list(1,
+                         next_list(2,
+                                   next_list(2)))))
+
+nl_rm_duplicates(x)
+#+END_SRC
+
+We can also implement this function for vectors. To avoid copying vectors each time we remove a duplicate, we can split the function into two parts:
+
+1. Find the indices of all duplicates 
+2. Remove these from the vector in a single operation 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+find_duplicates <- function(x, i = 1) {
+    if (i >= length(x)) return(c())
+
+    rest <- find_duplicates(x, i + 1)
+    if (x[i] == x[i + 1]) c(i, rest)
+    else rest
+}
+
+vector_rm_duplicates <- function(x) {
+    dup <- find_duplicates(x)
+    x[-dup]
+}
+
+vector_rm_duplicates(c(1, 1, 2, 3, 4, 4, 5, 5, 5))
+
+rm_duplicates <- function(vec) {
+    find_duplicates <- function(vec, i = 1) {
+        if (i >= length(vec)) return(c())
+
+        rest <- find_duplicates(vec, i + 1)
+        if (vec[i] == vec[i + 1]) c(i, rest)
+        else rest
+    }
+
+    dup <- find_duplicates(vec)
+    vec[-dup]
+}
+
+rm_duplicates(c(1, 1, 2, 2, 2, 2, 2, 3, 4, 5, 6, 5, 6, 6, 6))
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+!(duplicated(sample))
+
+rm_dups <- function(vec) {
+    vec[!(duplicated(vec))]
+}
+
+rm_dups(sample)
+#+END_SRC
+
+As another example of a recursive function where we need to combine results from recursive calls, we can consider computing the size of a tree.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+size_of_tree <- function(node) {
+    if (is.null(node$left) && is.null(node$right)) size <- 1
+    else {
+        left_size <- size_of_tree(node$left)
+        right_size <- size_of_tree(node$right)
+        size <- left_size + right_size + 1
+    }
+    size
+}
+
+tree <- make_node("root",
+                  make_node("C",
+                            make_node("A"),
+                            make_node("B")),
+                  make_node("D"))
+
+size_of_tree(tree)
+
+# if we wanted to remember the size of the subtrees so we wouldn't have to recompute them we could attempt the following
+# in R data is immutable, so this would create nodes that knew the size of a subtree but they would be copies
+set_size_of_subtrees <- function(node) {
+    if (is.null(node$left) && is.null(node$right)) node$size <- 1
+    else {
+        left_size <- set_size_of_subtrees(node$left)
+        right_size <- set_size_of_subtrees(node$right)
+        node$size <- left_size + right_size + 1
+    }
+    node$size
+}
+
+set_size_of_subtrees(tree)
+tree$size
+
+# to remember the sizes, we would need to reconstruct a new tree where the nodes knew their size 
+set_size_of_subtrees <- function(node) {
+    if (is.null(node$left) && is.null(node$right)) node$size <- 1
+    else {
+        left <- set_size_of_subtrees(node$left)
+        right <- set_size_of_subtrees(node$right)
+        node$size <- left$size + right$size + 1
+    }
+    node
+}
+
+tree <- set_size_of_subtrees(tree)
+tree$size
+#+END_SRC
+
+Another thing we can do with a tree is compute the depth-first-numbers of nodes. This allows us to determine if a node is in a given subtree. If each node knows the range of depth-first-numbers, and we can map leaves to their depth-first-number, we can determine if it is in a subtree just by checking if its depth-first-number is in the right range. 
+
+We need to keep track of the depth first numbers we have seen so far, and we need to return a new node that has the range for its subtree and we need to return a table of depth-first-numbers.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+depth_first_numbers <- function(node, dfn = 1) {
+    if (is.null(node$left) && is.null(node$right)) {
+        node$range <- c(dfn, dfn)
+        new_table <- table
+        table <- c()
+        table[node$name] <- dfn
+        list(node = node, new_dfn = dfn + 1, table = table)
+    } else {
+        left <- depth_first_numbers(node$left, dfn)
+        right <- depth_first_numbers(node$right, left$new_dfn)
+
+        new_dfn <- right$new_dfn
+        new_node <- make_node(node$name, left$node, right$node)
+        new_node$range <- c(left$node$range[1], new_dfn)
+        table <- c(left$table, right$table)
+        table[node$name] <- new_dfn
+        list(node = new_node, new_dfn = new_dfn + 1, table = table)
+    }
+}
+
+df <- depth_first_numbers(tree)
+
+df$node$range
+
+df$table
+#+END_SRC
+
+We can now use this depth-first-numbering to write a version of node_depth that only searches in the subtree where a node is actually found. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+in_df_range <- function(i, df_range) {
+    df_range[1] <= i && i <= df_range[2]
+}
+
+# check if the above is true before calling recursively
+node_depth <- function(tree, name, dfn_table, depth = 0) {
+    dfn <- dfn_table[name]
+
+    if (is.null(tree) || !in_df_range(dfn, tree$range)) return(NA)
+    if (tree$name == name) return(depth)
+    if (in_df_range(dfn, tree$left$range)) node_depth(tree$left, name, dfn_table, depth + 1)
+    else if (in_df_range(dfn, tree$right$range)) node_depth(tree$right, name, dfn_table, depth + 1)
+    else NA
+}
+
+node_depth <- Vectorize(node_depth,
+                        vectorize.args = "name",
+                        USE.NAMES = FALSE)
+
+node_depth(df$node, LETTERS[1:4], df$table)
+#+END_SRC
+
+** Tail Recursion 
+
+Functions that return the result of a recursive call without doing further computation on it are called tail-recursive. R does not implement this by default, but we can still exploit it and the optimizations possible. 
+
+We will look at translating our functions into loops explicitly in the next section. First we can look at a technique for translating non-tail recursive functions into tail recursive ones. 
+
+As long as you have a function that only calls recursively zero or one time, it is a simple trick: pass along values in recursive calls that can be used to compute the final value once the recursion gets to the base case. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+factbang <- function(n) {
+    if (n == 1) 1
+    else n * factbang(n - 1)
+}
+#+END_SRC
+
+We can translate this into a tail recursive function by passing the product of the numbers we have seen so far along to the recursive call. Such a value that is passed along is commonly called an accumulator. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+factbang <- function(n, acc = 1) {
+    if (n == 1) acc
+    else factbang(n - 1, acc * n)
+}
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# original 
+find_duplicates <- function(x, i = 1) {
+    if (i >= length(x)) return(c())
+    rest <- find_duplicates(x, i + 1)
+    if (x[i] == x[i + 1]) c(i, rest)
+    else rest
+}
+
+# with accumulator
+find_duplicates <- function(x, i = 1, acc = c()) {
+    if (i >= length(x)) return(acc)
+    if (x[i] == x[i + 1]) find_duplicates(x, i + 1, c(acc, i))
+    else find_duplicates(x, i + 1, acc)
+}
+
+find_duplicates(c(1, 2, 3, 4, 4, 5, 5, 5, 6))
+#+END_SRC
+
+All functions that call themselves recursively at most once can equally easily be translated into tail-recursive functions using an appropriate accumulator. It is harder for functions with more than one, like the tree functions; it requires a trick called continuation passing which is discussed in chapter 4.
+
+** Runtime Considerations 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+r_lin_search <- function(element, sequence, i = 1) {
+    if (i > length(sequence)) FALSE
+    else if (sequence[i] == element) TRUE
+    else r_lin_search(element, sequence, i + 1)
+}
+
+# with a for loop
+l_lin_search <- function(element, sequence) {
+    for (e in sequence) {
+        if (e == element) return(TRUE)
+    }
+    return(FALSE)
+}
+
+x <- 1:1000
+microbenchmark::microbenchmark(r_lin_search(-1, x),
+                               l_lin_search(-1, x))
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+r_binary_search <- function(element, x,
+                            first = 1, last = length(x)) {
+    if (last < first) return(FALSE)
+
+    middle <- (last - first) %/% 2 + first
+
+    if (element == x[middle]) TRUE
+    else if (element < x[middle]) {
+        r_binary_search(element, x, first, middle - 1)
+    } else {
+        r_binary_search(element, x, middle + 1, last)
+    }
+}
+
+# use a loop instead of recursive calls
+l_binary_search <- function(element, x,
+                            first = 1, last = length(x)) {
+    repeat {
+        if (last < first) return(FALSE)
+
+        middle <- (last - first) %/% 2 + first
+        if (element == x[middle]) return(TRUE)
+
+        else if (element < x[middle]) {
+            last <- middle - 1
+        } else {
+            first <- middle + 1
+        }
+    }
+}
+
+microbenchmark::microbenchmark(r_binary_search(-1, x),
+                               l_binary_search(-1, x))
+#+END_SRC
+
+In chapter 4 we will see how we can translate our functions into tail-recursive functions and then use a trick called a trampoline to replace recursion with loops.
+
