@@ -1,0 +1,5 @@
+* Higher Order Functions 
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
