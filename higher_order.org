@@ -3,3 +3,4 @@
 :header-args: :session R-session :results output value table :colnames yes
 :END:
 
+The term higher order functions refers to functions that either take functions as arguments or return functions. 
