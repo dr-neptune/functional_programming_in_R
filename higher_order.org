@@ -4,3 +4,213 @@
 :END:
 
 The term higher order functions refers to functions that either take functions as arguments or return functions. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+sapply(1:4, sqrt)
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+myapply <- function(x, f) {
+    result <- x
+    for (i in seq_along(x)) result[i] <- f(x[i])
+    result
+}
+
+myapply(1:4, sqrt)
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rescale <- function(x) {
+    m <- mean(x)
+    s <- sd(x)
+    (x - m) / s
+}
+
+rescale(1:4)
+
+# with apply 
+rescale <- function(x) {
+    m <- mean(x)
+    s <- sd(x)
+    f <- function(y) (y - m) / s
+    myapply(x, f)
+}
+
+rescale(1:4)
+
+# or with a lambda
+rescale <- function(x) {
+    m <- mean(x)
+    s <- sd(x)
+    myapply(x, function(y) (y - m) / s)
+}
+
+rescale(1:4)
+#+END_SRC
+
+** Currying 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+f <- function(x, y) x + y
+
+# we want to add 2 to each element 
+g <- function(y) f(2, y)
+myapply(1:4, g)
+
+# more generally
+h <- function(x) function(y) f(x, y)
+myapply(1:4, h(2))
+
+f(2, 2)
+h(2)(2)
+#+END_SRC
+
+A function such as h, one that takes a sequence of parameters not in a single function call but through a sequence of function calls, each taking a single parameter and returning a new function, is known as a curried function. What we did to transform f into h is called currying f. 
+
+A function for currying functions of two parameters can be written like this: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+curry2 <- function(f) function(x) function(y) f(x, y)
+
+h <- curry2(f)
+f(2, 3)
+h(2)(3)
+
+h <- curry2(`+`)
+h(2)(34)
+
+myapply(1:4, curry2(`+`)(2))
+#+END_SRC
+
+The function we wrote for currying only works on functions that take exactly 2 arguments, but functions are data that we can examine in R, so we can create a general version that can handle functions of any number of arguments. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+curry <- function(f) {
+    # get number of arguments
+    n <- length(formals(f))
+
+    # if only 1, then we are already curried 
+    if (n == 1) return(f)
+
+    # create a table to store vars when the chain of functions is called
+    arguments <- vector("list", length = n)
+
+    # create the actual function we should return
+    # call f with all the arguments in our list 
+    last <- function(x) {
+        arguments[n] <<- x
+        do.call(f, arguments)
+    }
+
+    # store args for each of the other functions 
+    make_i <- function(i, continuation) {
+        force(i); force(continuation)
+        function(x) {
+            arguments[i] <<- x
+            continuation
+        }
+    }
+    
+    # bind together in reverse order so we always have the continuation
+    
+    continuation <- last
+    for (i in seq(n - 1, 1)) {
+        continuation <- make_i(i, continuation)
+    }
+    continuation 
+}
+
+f <- function(x, y, z) x + 2*y + 3*z
+
+h <- function(x) function(y) function(z) x + 2*y + 3*z
+
+h(1)(2)(3)
+
+f(1, 2, 3)
+curry(f)(1)(2)(3)
+#+END_SRC
+
+** A Parameter Binding Function 
+
+We already have all the tools we need to write a function that binds a set of parameters for a function and returns another function where we can give the remaining parameters and get a value: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+bind_parameters <- function(f, ...) {
+    remembered <- list(...)
+
+    function(...) {
+        new <- list(...)
+        do.call(f, c(remembered, new))
+    }
+}
+
+f <- function(x, y, z, w = 4) x + 2*y + 3*z + 4*w
+
+f(1, 2, 3, 4)
+
+g <- bind_parameters(f, y = 2)
+g(x = 1, z = 3)
+
+h <- bind_parameters(f, y = 1, w = 1)
+h(x = 2, z = 3)
+f(2, 1, 3, 1)
+#+END_SRC
+
+** Continuation-Passing Style 
+
+The trick we used to create curry involved creating a chain of functions where each function returns the next function that should be called, the continuation. This idea of having the remainder of a computation as a function you can eventually call can be used in many other problems. 
+
+Consider the task of adding all elements in a list. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+my_sum_direct <- function(lst) {
+    if (is_empty(lst)) 0
+    else first(lst) + my_sum_direct(rest(lst))
+}
+
+example <- 1:5
+
+first(example)
+
+my_sum_direct(example)
+
+my_sum_acc <- function(lst, acc = 0) {
+    if (is_empty(lst)) acc
+    else my_sum_acc(rest(lst), (acc + first(lst)))
+}
+
+my_sum_acc(example)
+
+my_sum_cont <- function(lst, cont = identity) {
+    if (is_empty(lst)) cont(0)
+    else my_sum_cont(rest(lst),
+                     function(acc) cont(first(lst) + acc))
+}
+
+my_sum_cont(example)
+#+END_SRC
+
+In the last example, the tail recursion is carried out via a continuation function. This works the same way as the accumulator in the second function. It captures the partial sum moving down the recursion, expressing acc as a not-yet-evaluated function. This function will eventually be called by the sum of values for the rest of the recursion, so the job at this place is simply to take the value it will eventually be provided, add the current value, and then call the continuation it was passed earlier to complete the computation. 
+
+A common use of continuations is to translate non-tail-recursive functions into tail-recursive functions. 
+
+In the tree size example we needed to handle internal nodes by first calling recursively on the left subtree, then the right subtree to get the sizes of those, and then combining them and adding one for the internal node. Because we needed the results from two recursive calls, we couldn't directly make the function tail-recursive, but with continuations we can. 
+
+The trick is to pass a continuation along that is used to wrap one of the recursions while we handle the other recursion in a tail-recursive call. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+size_of_tree <- function(node, continuation = identity) {
+    if (is.null(node$left) && is.null(node$right)) {
+        continuation(1)
+    } else {
+        new_continuation <- function(left_result) {
+            continuation(left_result + size_of_tree(node$right) + 1)
+        }
+        size_of_tree(node$left, new_continuation)
+    }
+}
+
+size_of_tree(tree)
+#+END_SRC
+
+
