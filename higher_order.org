@@ -213,4 +213,36 @@ size_of_tree <- function(node, continuation = identity) {
 size_of_tree(tree)
 #+END_SRC
 
+The function takes a continuation along in its call, and this function is responsible for computing "the rest of what needs to be done." 
 
+For internal nodes, we would do this:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+new_continuation <- function(left_result) {
+    continuation(left_result + size_of_tree(node$right) + 1)
+}
+
+size_of_tree(node$left, new_continuation)
+#+END_SRC
+
+There is a catch: We avoid deep recursions to the left, but the continuation we create is going to call functions just as deeply as we would earlier do in the recusion. There is a trick to getting around this, which, while slightly slower, will let us write functions with more than one recusion without having too deep of recursive calls. 
+
+** Thunks and Trampolines
+
+There are two pieces to the solution of too deep recursions. 
+
+- The first is called a thunk, which is a function that takes no arguments and returns a value. It is used to wrap up a little bit of computation that you can evaluate later. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+make_thunk <- function(f, ...) {
+    force(f)
+    params <- list(...)
+    function() do.call(f, params)
+}
+
+# now we can turn any function into a thunk 
+f <- function(x, y) x + y
+thunk <- make_thunk(f, 2, 2)
+thunk()
+
+#+END_SRC
