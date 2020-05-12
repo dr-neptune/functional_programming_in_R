@@ -1,0 +1,30 @@
+* Filter, Map, and Reduce 
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
+- Filter takes a sequence and a predicate, and returns a sequence where all the elements of the predicate are true and the rest are removed
+- Map evaluates a function on each item in a sequence and returns a sequence with the results of evaluating the function
+- Reduce takes a sequence and a function and evaluates the function repeatedly to reduce the sequence to a single value 
+
+** Filtering Sequences 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+is_even <- function(x) x %% 2 == 0
+
+Filter(is_even, 1:10)
+#+END_SRC
+
+This is often used together with closures so the predicate can depend on local variables: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+larger_than <- function(x) function(y) y > x
+
+Filter(larger_than(5), 1:10)
+#+END_SRC
+
+This also works with the curry functions we wrote earlier: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+
+#+END_SRC
