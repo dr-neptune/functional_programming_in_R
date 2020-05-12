@@ -58,7 +58,7 @@ g <- function(y) f(2, y)
 myapply(1:4, g)
 
 # more generally
-h <- function(x) function(y) f(x, y)
+ <- function(x) function(y) f(x, y)
 myapply(1:4, h(2))
 
 f(2, 2)
@@ -231,7 +231,8 @@ There is a catch: We avoid deep recursions to the left, but the continuation we 
 
 There are two pieces to the solution of too deep recursions. 
 
-- The first is called a thunk, which is a function that takes no arguments and returns a value. It is used to wrap up a little bit of computation that you can evaluate later. 
+- The first is called a thunk, which is a function that takes no arguments and returns a value. It is used to wrap up a little bit of computation that you can evaluate later.
+- A trampoline is a function that keeps evaluating thunks until it gets a value
 
 #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
 make_thunk <- function(f, ...) {
@@ -244,5 +245,119 @@ make_thunk <- function(f, ...) {
 f <- function(x, y) x + y
 thunk <- make_thunk(f, 2, 2)
 thunk()
-
 #+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+trampoline <- function(thunk) {
+    while (is.function(thunk)) thunk <- thunk()
+    thunk
+}
+#+END_SRC
+
+To see how thunks and trampolinees can be combined to avoid recursion, we consider the simpler case of calculating the factorial of a number. 
+
+Here is the original recursive version:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+factorial <- function(n) {
+    if (n == 1) 1
+    else n * factorial(n - 1)
+}
+
+# tail recursive version with accumulator
+factorial <- function(n, acc = 1) {
+    if (n == 1) acc
+    else factorial(n - 1, acc * n)
+}
+#+END_SRC
+
+To get the thunk trampoline version, we must first rewrite using continuation passing. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+cp_factorial <- function(n, continuation = identity) {
+    if (n == 1) {
+        continuation(1)
+    } else {
+        new_continuation <- function(result) {
+            continuation(result * n)
+        }
+        cp_factorial(n - 1, new_continuation)
+    }
+}
+
+factorial(10)
+cp_factorial(10)
+#+END_SRC
+
+Instead of calling recursively, we want each recursive call to create a thunk instead. This will create a thunk that does the next step and returns a thunk for the step after that, but it will not call the next step, so no recursion. We need such thunks for both the recursions and the continuations. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+thunk_factorial <- function(n, continuation = identity) {
+    if (n == 1) continuation(1)
+    else {
+        new_continuation <- function(result) {
+            make_thunk(continuation, n * result)
+        }
+        make_thunk(thunk_factorial, n - 1, new_continuation)
+    }
+}
+#+END_SRC
+
+Calling this function with 1 directly gives us a value. Calling it with 2 creates a thunk 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+thunk_factorial(1)
+
+thunk_factorial(2)
+#+END_SRC
+
+We need to call this thunk to move down the recursion to the base case. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+thunk_factorial(2)()()
+#+END_SRC
+
+For each additional step in the recursion, we get two more thunks: one for going down the recursion and the next for evaluating the thunk. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+thunk_factorial(3)()()()()
+#+END_SRC
+
+Of course, we don't want to call these thunks explicitly, so we use a trampoline. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+trampoline(thunk_factorial(100))
+#+END_SRC
+
+We can write another higher order function for translating such a thunkenized function into one that uses the trampoline to do the calculation like this:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+make_trampoline <- function(f) function(...) trampoline(f(...))
+
+factorial <- make_trampoline(thunk_factorial)
+
+factorial(100)
+#+END_SRC
+
+For computing the size of a tree, we do exactly the same thing. It doesn't make that the continuation does something more complex. 
+
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+thunk_size <- function(node, continuation = identity) {
+    if (is.null(node$left) && is.null(node$right)) {
+        continuation(1)
+    } else {
+        new_continuation <- function(left_result) {
+            make_thunk(continuation,
+                       left_result + thunk_size(node$right) + 1)
+        }
+        make_thunk(thunk_size, node$left, new_continuation)
+    }
+}
+
+size_of_tree <- make_trampoline(thunk_size)
+
+size_of_tree(tree)
+#+END_SRC
+
+Using the trampoline, we never run into problems with hitting the call stack limit; we never call recursively, we just create thunks on the fly whenever we would need to call a function. 
