@@ -26,5 +26,255 @@ Filter(larger_than(5), 1:10)
 This also works with the curry functions we wrote earlier: 
 
 #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+curry2 <- function(f) function(x) function(y) f(x, y)
 
+# these are misleading because they do the opposites
+Filter(curry2(`<`)(5), 1:10)  # returns <(5, y) or 5 < y or y >= 5 
+Filter(curry2(`>=`)(5), 1:10) # returns >=(5, y) or 5 >= y or y < 5
+
+# we fix this be reversing the order of arguments in the curry function 
+rcurry2 <- function(f) function(y) function(x) f(x, y)
+
+Filter(rcurry2(`<`)(5), 1:10)  # returns <(5, y) or 5 < y or y >= 5 
+Filter(rcurry2(`>=`)(5), 1:10) # returns >=(5, y) or 5 >= y or y < 5
+#+END_SRC
+
+We do not need to limit it to sequences of the same type 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+s <- list(a = 1:10,
+          b = list(1:6),
+          c = y ~ x1 + x2 + x3,
+          d = vector("numeric"))
+
+Filter(function(x) length(x) < 5, s)
+#+END_SRC
+
+We could unlist this, but we would be limited by the vector constraint that they all must be the same type. 
+
+** Mapping Over Sequences 
+
+The Map function evaluates a function for each element in a list and returns a list with the results: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Map(is_even, 1:5)
+#+END_SRC
+
+As with Filter, Map is usually combined with closures 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+add <- function(x) function(y) x + y
+Map(add(2), 1:5)
+Map(add(3), 1:5)
+#+END_SRC
+
+It can also be applied to heterogenous lists 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Map(length, s)
+#+END_SRC
+
+It also supports arbitrary sequences provided they are the same length or one vector is some multiple of the other
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Map(`+`, 1:5, 6:10)
+
+Map(`+`, 1:5, 16:30)
+#+END_SRC
+
+We can also pass named parameters to a Map call 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+x <- 1:10
+y <- c(NA, x)
+z <- list(x = x,
+          y = y)
+
+Map(mean, z)
+Map(mean, z, na.rm = TRUE)
+Map(mean, z, MoreArgs = list(na.rm = TRUE))
+#+END_SRC
+
+The difference in semantics comes into play when providing arguments that are sequences. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# scale a sequence x by the mean and sd of a sequence y 
+scale <- function(x, y) (x - mean(y)) / sd(y)
+
+# returns NA because we call sd on single values 
+Map(scale, 1:10, 1:5)
+
+# if we use MoreArgs, the vector y is provided to scale in each call 
+Map(scale, 1:10, MoreArgs = list(y = 1:5))
+#+END_SRC
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Map(length, s)
+#+END_SRC
+
+** Reducing Sequences 
+
+While Filter and Map produce lists, the Reduce function transforms a list into a value. 
+
+These are equivalent 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Reduce(f, 1:5)
+f(f(f(f(1, 2), 3), 4), 5)
+
+Reduce(`+`, 1:5)
+#+END_SRC
+
+We can also get the step-wise results back using the parameter accumulate.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Reduce(`+`, 1:5, accumulate = TRUE)
+#+END_SRC
+
+We can also reverse the order 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Reduce(`+`, 1:5, right = TRUE, accumulate = TRUE)
+#+END_SRC
+
+We can also get the same behavior as accumulate in some functional languages that require an initial value (like scheme)
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+Reduce(`+`, 1:5, init = 10, accumulate = TRUE)
+#+END_SRC
+
+For more complex data where we do not already have a function to summarize a list, Reduce is the way to go
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+samples <- replicate(3,
+                     sample(1:10, replace = TRUE),
+                     simplify = FALSE)
+
+str(samples)
+
+Reduce(intersect, samples)
+#+END_SRC
+
+** Bringing the Functions Together 
+
+This is an example with trees. I don't want to go back and re run all the code to add it to my environment and I feel like I have a strong grasp on these functions as is
+
+** The Apply Family of Functions 
+
+- sapply tries to simplify its output
+- vapply takes a value as an arg and will coerce its output to have the type of this value and give an error if it cannot
+- lapply maps over lists 
+
+** The apply function 
+
+The apply function works on matrices and higher-dimensional arrays instead of sequences. 
+
+We can see this in action by creating a matrix to apply over: 
+
+ #+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+(m <- matrix(1:6, nrow = 2, byrow = TRUE))
+ #+END_SRC
+
+To see what is happening, here is a function that collects the data it gets so we can see exactly what it is called with 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+collapse_input <- function(x) paste(x, collapse = "")
+#+END_SRC
+
+If we marginalize on rows 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+apply(m, 1, collapse_input)
+#+END_SRC
+
+If we marginalize on columns 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+apply(m, 2, collapse_input)
+#+END_SRC
+
+If we marginalize on both rows and columns 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+apply(m, c(1, 2), collapse_input)
+#+END_SRC
+
+** The tapply Function
+
+The tapply function works on ragged tables, tables where the rows can have different lengths. 
+
+You cannot directly make an array with different sizes of dimensions in rows, but you can use a flat vector combined with factors that indicate which virtual dimensions you are using. The tapply function groups the vectors according to a factor and then calls its function with each group:
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+(x <- rnorm(10))
+(categories <- sample(LETTERS[1:3], size = 10, replace = TRUE))
+
+tapply(x, categories, mean)
+#+END_SRC
+
+You can use more than one factor if you wrap the factors in a list: 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+(categories2 <- sample(LETTERS[25:26], size = 10, replace = TRUE))
+
+tapply(x, list(categories, categories2), mean)
+#+END_SRC
+
+** Functional Programming in purrr 
+
+love it 
+
+The purrr analog of filter is called keep. discard returns the elements where the predicate is false
+
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+library(purrr)
+
+keep(1:5, rcurry2(`>`)(3))
+discard(1:5, rcurry2(`>`)(3))
+
+keep(as.list(1:5), rcurry2(`>`)(3))
+#+END_SRC
+
+Two convenience functions are every and some, which check if every or any of the elements in a list satisfy some predicate. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+every(1:5, rcurry2(`>`)(0))
+some(1:5, rcurry2(`>`)(3))
+some(1:5, rcurry2(`>`)(6))
+#+END_SRC
+
+We could also use formula notation 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+keep(1:5, ~ .x > 3)
+discard(1:5, ~ .x > 3)
+#+END_SRC
+
+map functions are both typed and uptyped in purrr 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+map(1:5, ~ .x + 2)
+map_dbl(1:5, ~ .x + 2)
+map2_dbl(1:5, 6:10, ~ 2 * .x + .y)
+#+END_SRC
+
+For arbitrary numbers of sequences, we have pmap 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+pmap_dbl(list(1:5, 6:10, 11:15),
+     function(x, y, z) sum(x, y, z))
+#+END_SRC
+
+We can combine map and filter with map_if 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+unlist(map_if(1:5, ~ .x %% 2 == 1, ~ 2 * .x))
+#+END_SRC
+
+and we have reduce functions 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+reduce(1:5, `+`)
+reduce_right(1:5, `*`)
 #+END_SRC

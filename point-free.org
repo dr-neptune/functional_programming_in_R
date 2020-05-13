@@ -1,0 +1,6 @@
+* Point-Free Programming 
+:PROPERTIES:
+:header-args: :session R-session :results output value table :colnames yes
+:END:
+
+Point-free programming is characterized by constructing functions through a composition of other functions and not by actually writing new functions. 
