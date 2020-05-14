@@ -4,3 +4,101 @@
 :END:
 
 Point-free programming is characterized by constructing functions through a composition of other functions and not by actually writing new functions. 
+
+The term point free refers to the intermediate states data can be in when computing a sequence of transformations. The points it refers to are the states the data are in after each transformation, and point-free means that we do not focus on those points in any way. This is exactly what is done when we write a pipeline in the shell. 
+
+
+** Function Composition 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+h <- function(x) g(f(x))
+
+# or more verbose
+h <- function(x) {
+    y <- f(x)
+    g(y)
+}
+#+END_SRC
+
+We can write a function composition function, a higher order function that takes two functions as arguments and returns their compositions
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+compose <- function(g, f) function(...) g(f(...))
+
+umap <- compose(unlist, Map)
+umap(curry2(`+`)(2), 1:4)
+#+END_SRC 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+library(pryr)
+
+umap <- unlist %.% Map
+umap(curry2(`+`)(2), 1:5)
+#+END_SRC
+
+We are not limited to two functions, and since function composition is associative, we don't need to worry about the order in which they are composed; so we don't need parentheses.
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rmse <- sqrt %.% mean %.% function(x, y) (x - y)**2
+
+rmse(1:4, 2:5)
+#+END_SRC 
+
+We could also write a function composition operator that reverses the order of the functions 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+`%;%` <- function(f, g) function(...) g(f(...))
+
+rmse <- (function(x, y) (x - y)**2) %;% mean %;% sqrt
+rmse(1:4, 2:5)
+#+END_SRC
+
+** Pipelines 
+
+magrittr is real freaking neato 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+library(magrittr)
+
+1:4 %>% mean %>% sqrt
+
+data.frame(x = 1:4, y = 2:5) %>% plot(y ~ x, data = .)
+data.frame(x = 1:4, y = 2:5) %>% plot(.$x, .$y)
+
+# we can use the . several times in a function call
+rnorm(4) %>% data.frame(x = ., y = cos(.))
+
+# if . only appears in function calls, it will algo be given to the function as a first parameter
+rnorm(4) %>% data.frame(x = sin(.), y = cos(.))
+#+END_SRC
+
+We can also use it for defining new functions by composing other functions. We can do this by letting the first step be .
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+mean_sqrt <- . %>% mean %>% sqrt
+
+mean_sqrt(1:4)
+
+1:4 %>% mean_sqrt
+#+END_SRC
+
+Above only works for functions that take a single variable as input. The pipeline pattern works by assuming that it is a single piece of data that is passed along between function calls. We can pass along more complex pipelines though. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+# consider this function from before
+rmse <- (function(x, y) (x - y)**2) %;% mean %;% sqrt
+
+# can be rewritten as
+rmse <- . %>% {(.$x - .$y)**2} %>% mean %>% sqrt
+
+data.frame(x = 1:4, y = 2:5) %>% rmse
+#+END_SRC
+
+In magrittr we can use a less verbose syntax for writing anonymous functions. {(.$x - .$y)**2} is syntactic sugar for (function(data) (data$x - data$y)**2) where the argument is passed in as "."
+
+Anonymous functions are also the way to prevent the . parameter from getting implicitly passed as the first argument to a function when it is otherwise used in function calls. 
+
+#+BEGIN_SRC R :post round-tbl[:colnames yes](*this*)
+rnorm(4) %>% {data.frame(x = sin(.), y = cos(.))}
+#+END_SRC
+
